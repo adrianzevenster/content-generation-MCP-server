@@ -1,0 +1,10 @@
+fastapi[standard]
+uvicorn[standard]
+python-dotenv
+
+google-adk[a2a]
+google-genai
+
+mcp
+
+httpx
