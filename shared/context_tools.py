@@ -3,6 +3,7 @@ from typing import Dict, Any
 
 def get_product_details(product_id: str) -> Dict[str, Any]:
     demo_catalog = {
+        # keep the old alias if you want
         "MP-ACC-001": {
             "name": "Moniepoint Business Account",
             "category": "financial_product",
@@ -15,17 +16,18 @@ def get_product_details(product_id: str) -> Dict[str, Any]:
             "tone": "trustworthy, growth-focused, supportive",
         },
 
-        # Example FastFinance product (optional, ready for future use)
-        "FF-ACC-001": {
-            "name": "FastFinance Business Account",
+        # ✅ NEW: match what your API sends
+        "moniepoint_business_account": {
+            "name": "Moniepoint Business Account",
             "category": "financial_product",
             "features": [
-                "Fast account setup",
-                "Clear pricing",
-                "Digital-first account management",
+                "Business account for SMEs",
+                "Helps separate business and personal finances",
+                "Supports day-to-day business transactions",
             ],
-            "target_segment": "Time-poor professionals and growing businesses",
-            "tone": "confident, efficient, modern",
+            "target_segment": "SMEs in Nigeria",
+            "tone": "trustworthy, growth-focused, supportive",
+            "note": "Generic fallback; real product facts should live in RAG sources.",
         },
     }
 
@@ -42,6 +44,7 @@ def get_product_details(product_id: str) -> Dict[str, Any]:
         "product_id": product_id,
         "product": product,
     }
+
 
 
 def get_brand_guidelines(brand: str) -> Dict[str, Any]:

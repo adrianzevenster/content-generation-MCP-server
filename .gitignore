@@ -4,3 +4,4 @@ __pycache__/
 .venv/
 venv/
 adk-agent-key.json
+secrets/

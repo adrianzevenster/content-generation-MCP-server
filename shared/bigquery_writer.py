@@ -19,6 +19,7 @@ BQ_PROJECT_ID = (
 )
 BQ_DATASET_ID = os.getenv("MONC_BQ_DATASET_ID", "monc_content")
 BQ_TABLE_ID = os.getenv("MONC_BQ_TABLE_ID", "generated_ads_v2")
+BQ_HARDKNOCKS_TABLE_ID = os.getenv("MONC_BQ_HARDKNOCKS_TABLE_ID", "hard_knocks_v1")
 
 
 _client: Optional[bigquery.Client] = None
@@ -89,6 +90,83 @@ def ensure_bigquery_dataset_and_table() -> None:
 
     _bq_initialized = True
 
+_hk_initialized = False
+
+def ensure_bigquery_hardknocks_table() -> None:
+    global _hk_initialized
+    if _hk_initialized:
+        return
+
+    client = _get_client()
+
+    # Dataset already ensured by the ads initializer, but safe anyway:
+    dataset_ref = bigquery.Dataset(f"{BQ_PROJECT_ID}.{BQ_DATASET_ID}")
+    try:
+        client.get_dataset(dataset_ref)
+    except NotFound:
+        dataset_ref.location = "EU"
+        client.create_dataset(dataset_ref)
+
+    table_id = f"{BQ_PROJECT_ID}.{BQ_DATASET_ID}.{BQ_HARDKNOCKS_TABLE_ID}"
+
+    schema = [
+        bigquery.SchemaField("id", "STRING", mode="REQUIRED"),
+
+        bigquery.SchemaField("request_prompt", "STRING", mode="NULLABLE"),
+        bigquery.SchemaField("advice_text", "STRING", mode="NULLABLE"),
+
+        bigquery.SchemaField("created_by_agent", "STRING", mode="NULLABLE"),
+        bigquery.SchemaField("user_id", "STRING", mode="NULLABLE"),
+        bigquery.SchemaField("trace_id", "STRING", mode="NULLABLE"),
+
+        bigquery.SchemaField("raw_agent_payload", "STRING", mode="NULLABLE"),
+
+        bigquery.SchemaField("created_at", "TIMESTAMP", mode="REQUIRED"),
+    ]
+
+    table = bigquery.Table(table_id, schema=schema)
+
+    try:
+        client.get_table(table)
+    except NotFound:
+        client.create_table(table)
+
+    _hk_initialized = True
+
+
+def _build_rows_from_hardknocks_result(agent_result: Dict[str, Any]) -> List[Dict[str, Any]]:
+    request = agent_result.get("request", {})
+    advice = agent_result.get("advice_output", {})
+    meta = agent_result.get("meta", {})
+
+    now = datetime.now(timezone.utc).isoformat()
+
+    row = {
+        "id": str(uuid.uuid4()),
+        "request_prompt": request.get("prompt"),
+        "advice_text": advice.get("text"),
+        "created_by_agent": meta.get("created_by_agent"),
+        "user_id": meta.get("user_id"),
+        "trace_id": meta.get("trace_id"),
+        "raw_agent_payload": json.dumps(agent_result, ensure_ascii=False),
+        "created_at": now,
+    }
+    return [row]
+
+
+def write_hardknocks_result_to_bigquery(agent_result: Dict[str, Any]) -> None:
+    ensure_bigquery_hardknocks_table()
+
+    client = _get_client()
+    table_id = f"{BQ_PROJECT_ID}.{BQ_DATASET_ID}.{BQ_HARDKNOCKS_TABLE_ID}"
+    rows_to_insert = _build_rows_from_hardknocks_result(agent_result)
+
+    if not rows_to_insert:
+        return
+
+    errors = client.insert_rows_json(table_id, rows_to_insert)
+    if errors:
+        raise RuntimeError(f"Failed to insert rows into BigQuery (HardKnocks): {errors}")
 
 # -----------------------------------
 # Map your agent/API result to a row
