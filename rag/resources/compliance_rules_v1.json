@@ -1,0 +1,10 @@
+{
+  "doc_id": "compliance_rules_v1",
+  "title": "Compliance Rules",
+  "source": "internal",
+  "type": "compliance_rules",
+  "market": "NG",
+  "product": "skywalkershares_business_account",
+  "brand": "SkywalkerShares",
+  "text": "Put your approved compliance rules here."
+}
