@@ -35,7 +35,6 @@ def upload_json_lines_as_json(
 ) -> str:
     """
     Writes newline-delimited JSON to GCS and returns gs://... URI.
-    (We keep the name you’re calling from scripts.)
     """
     bucket_name, bucket_prefix = _split_gs_uri(bucket_uri)
     full_path = f"{bucket_prefix.rstrip('/')}/{object_path.lstrip('/')}".strip("/")

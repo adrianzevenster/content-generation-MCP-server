@@ -31,7 +31,7 @@ def build_compliance_agent() -> LlmAgent:
     Build the ComplianceAgent as an A2A-compatible ADK LlmAgent.
     """
     return LlmAgent(
-        model="gemini-2.0-flash",
+        model="gemini-2.5-flash",
         name="moniepoint_compliance_agent",
         description="Reviews ad copy for compliance and returns JSON with an approval decision.",
         instruction=_make_instruction(),
