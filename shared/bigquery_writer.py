@@ -8,10 +8,6 @@ from google.api_core.exceptions import NotFound
 
 import json
 
-# -------------------------------------------------------------------
-# CONFIG (override these with env vars in Docker / Cloud Run / local)
-# -------------------------------------------------------------------
-
 BQ_PROJECT_ID = (
         os.getenv("MONC_BQ_PROJECT_ID")
         or os.getenv("GOOGLE_CLOUD_PROJECT")
@@ -32,11 +28,6 @@ def _get_client() -> bigquery.Client:
         _client = bigquery.Client(project=BQ_PROJECT_ID)
     return _client
 
-
-# ------------------------------------
-# Dataset & table creation (code-first)
-# ------------------------------------
-
 def ensure_bigquery_dataset_and_table() -> None:
     """
     Ensure that the dataset and table exist in BigQuery.
@@ -53,11 +44,9 @@ def ensure_bigquery_dataset_and_table() -> None:
     try:
         client.get_dataset(dataset_ref)
     except NotFound:
-        # Set region to match your project (e.g. "EU", "US", "europe-west1")
         dataset_ref.location = "EU"
         client.create_dataset(dataset_ref)
 
-    # Table schema: 1 row per /generateAd call
     table_id = f"{BQ_PROJECT_ID}.{BQ_DATASET_ID}.{BQ_TABLE_ID}"
 
     schema = [
@@ -99,7 +88,6 @@ def ensure_bigquery_hardknocks_table() -> None:
 
     client = _get_client()
 
-    # Dataset already ensured by the ads initializer, but safe anyway:
     dataset_ref = bigquery.Dataset(f"{BQ_PROJECT_ID}.{BQ_DATASET_ID}")
     try:
         client.get_dataset(dataset_ref)
@@ -168,9 +156,6 @@ def write_hardknocks_result_to_bigquery(agent_result: Dict[str, Any]) -> None:
     if errors:
         raise RuntimeError(f"Failed to insert rows into BigQuery (HardKnocks): {errors}")
 
-# -----------------------------------
-# Map your agent/API result to a row
-# -----------------------------------
 
 def _build_rows_from_agent_result(agent_result: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
@@ -213,10 +198,6 @@ def _build_rows_from_agent_result(agent_result: Dict[str, Any]) -> List[Dict[str
 
     return [row]
 
-
-# -----------------------
-# Public write function
-# -----------------------
 
 def write_agent_result_to_bigquery(agent_result: Dict[str, Any]) -> None:
     """

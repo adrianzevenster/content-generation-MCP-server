@@ -151,7 +151,7 @@ def build_ad_copy_agent(
     brand_tool = FunctionTool(get_brand_guidelines)
 
     return LlmAgent(
-        model="gemini-2.0-flash",
+        model="gemini-2.5-flash",
         name="moniepoint_adcopy_agent",
         description="Generates channel-specific ad copy for Moniepoint products.",
         instruction=_adcopy_instruction(),
@@ -169,7 +169,7 @@ def build_fastfinance_ad_copy_agent(
     brand_tool = FunctionTool(get_brand_guidelines)
 
     return LlmAgent(
-        model="gemini-2.0-flash",
+        model="gemini-2.5-flash",
         name="fastfinance_adcopy_agent",
         description="Generates channel-specific ad copy for FastFinance products.",
         instruction=_fastfinance_adcopy_instruction(),
@@ -182,7 +182,7 @@ def build_school_of_hard_knocks_agent() -> LlmAgent:
     School of Hard Knocks advisor agent (life/career/productivity coaching).
     """
     return LlmAgent(
-        model="gemini-2.0-flash",
+        model="gemini-2.5-flash",
         name="school_of_hard_knocks_agent",
         description="Blunt, practical coaching inspired by Stoicism, habit science, deep work, and first-principles reasoning.",
         instruction=_hard_knocks_instruction(),
@@ -191,7 +191,7 @@ def build_school_of_hard_knocks_agent() -> LlmAgent:
 
 def build_simple_echo_agent() -> LlmAgent:
     return LlmAgent(
-        model="gemini-2.0-flash",
+        model="gemini-2.5-flash",
         name="simple_echo_agent",
         description="Just repeats and lightly rewrites the user prompt.",
         instruction=(

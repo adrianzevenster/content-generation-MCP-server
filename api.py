@@ -252,6 +252,8 @@ async def generate_ad(req: GenerateAdRequest) -> GenerateAdResponse:
     retrieval_query: Optional[str] = None
     restricts: Optional[List[Dict[str, Any]]] = None
 
+    query_parts: List[str] = [req.prompt]
+
     if rag_enabled and rag_retriever is not None and format_rag_context is not None:
         try:
             retrieval_query = _build_retrieval_query(req)
@@ -264,13 +266,19 @@ async def generate_ad(req: GenerateAdRequest) -> GenerateAdResponse:
             )
 
             rag_block = format_rag_context(chunks)
-            rag_debug = [{"id": c.id, "score": c.score, "meta": c.metadata} for c in chunks]
+            rag_debug = [
+                {
+                    "id": c.id,
+                    "score": c.score,
+                    "meta": c.metadata,
+                }
+                for c in chunks
+            ]
+
         except Exception as exc:
             print(f"[RAG] Retrieval failed (continuing without RAG context): {exc}")
             rag_block = ""
             rag_debug = []
-
-            query_parts: List[str] = [req.prompt]
 
     query_parts.append(
         "Instruction: Use only claims supported by [RAG_CONTEXT], [PRODUCT_DETAILS], and [BRAND_GUIDELINES]. "
