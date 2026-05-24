@@ -8,7 +8,7 @@ from google.protobuf.json_format import MessageToDict
 
 from rag.config import RagConfig
 from rag.embeddings import VertexEmbeddingClient
-
+from rag.docstore import load_docstore
 
 @dataclass
 class RagChunk:
@@ -18,8 +18,6 @@ class RagChunk:
     text: str
     metadata: Dict[str, Any]
 
-
-# Backwards compat export (your rag/__init__.py expects this name)
 RetrievedChunk = RagChunk
 
 
@@ -36,14 +34,12 @@ def _to_dict(obj: Any) -> Dict[str, Any]:
     if isinstance(obj, dict):
         return obj
 
-    # protobuf message (Struct, etc.)
     if hasattr(obj, "DESCRIPTOR"):
         try:
             return MessageToDict(obj, preserving_proto_field_name=True)
         except Exception:
             pass
 
-    # some SDK objects wrap protobuf in _pb
     pb = getattr(obj, "_pb", None)
     if pb is not None and hasattr(pb, "DESCRIPTOR"):
         try:
@@ -51,16 +47,14 @@ def _to_dict(obj: Any) -> Dict[str, Any]:
         except Exception:
             pass
 
-    # some SDK objects have to_dict()
     if hasattr(obj, "to_dict"):
         try:
             return obj.to_dict()
         except Exception:
             pass
 
-    # last resort
     try:
-        return dict(obj)  # type: ignore[arg-type]
+        return dict(obj)
     except Exception:
         return {}
 
@@ -68,6 +62,7 @@ def _to_dict(obj: Any) -> Dict[str, Any]:
 class VertexVectorSearchRetriever:
     def __init__(self, cfg: RagConfig):
         self.cfg = cfg
+        self.docstore = load_docstore()
         aiplatform.init(project=cfg.project, location=cfg.location)
 
         self.endpoint = aiplatform.MatchingEngineIndexEndpoint(
@@ -117,14 +112,64 @@ class VertexVectorSearchRetriever:
             distance = float(getattr(nb, "distance", 0.0) or 0.0)
             chunk_id = str(getattr(nb, "id", "") or "")
 
+            doc = self.docstore.get(chunk_id, {})
+            text = doc.get("text", "")
+            metadata = doc.get("metadata", {})
+
             # datapoint usually here on your SDK
             dp = getattr(nb, "from_index_datapoint", None) or getattr(nb, "datapoint", None)
 
-            emb_md = getattr(dp, "embedding_metadata", None) if dp is not None else None
-            md = _to_dict(emb_md)
+            md: Dict[str, Any] = {}
 
-            text = str(md.get("text", "") or "")
-            meta = {k: v for k, v in md.items() if k != "text"}
+            if dp is not None:
+                emb_md = getattr(dp, "embedding_metadata", None)
+
+                # direct metadata extraction
+                if emb_md is not None:
+                    md = _to_dict(emb_md)
+
+                # fallback for SDK wrappers
+                if not md and hasattr(dp, "to_dict"):
+                    try:
+                        dp_dict = dp.to_dict()
+
+                        md = (
+                                dp_dict.get("embedding_metadata")
+                                or dp_dict.get("embeddingMetadata")
+                                or {}
+                        )
+
+                    except Exception:
+                        pass
+
+                # protobuf fallback
+                if not md:
+                    pb = getattr(dp, "_pb", None)
+                    if pb is not None:
+                        try:
+                            pb_dict = MessageToDict(
+                                pb,
+                                preserving_proto_field_name=True,
+                            )
+
+                            md = (
+                                    pb_dict.get("embedding_metadata")
+                                    or pb_dict.get("embeddingMetadata")
+                                    or {}
+                            )
+
+                        except Exception:
+                            pass
+
+            if md:
+                text = str(md.get("text", "") or "")
+                meta = {k: v for k, v in md.items() if k != "text"}
+            else:
+                text = str(text or "")
+                meta = dict(metadata or {})
+
+            if not text:
+                continue
 
             out.append(
                 RagChunk(

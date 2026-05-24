@@ -6,7 +6,6 @@ FILTER_KEYS = ("market", "product", "brand", "type", "doc_id")
 
 
 def format_rag_context(chunks: List[Dict[str, Any]]) -> str:
-    # Convenience helper (your __init__.py was importing this earlier)
     parts: List[str] = []
     for c in chunks:
         meta = c.get("metadata") or {}
@@ -25,7 +24,6 @@ def build_datapoint_row(
     md = dict(metadata or {})
     md.setdefault("doc_id", md.get("doc_id") or _doc_id_from_chunk_id(datapoint_id))
 
-    # IMPORTANT: Matching Engine returns embedding_metadata only if you stored it
     embedding_metadata: Dict[str, Any] = {"text": text}
     for k in FILTER_KEYS:
         if k in md and md[k] is not None:

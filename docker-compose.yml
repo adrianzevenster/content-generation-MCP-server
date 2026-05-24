@@ -3,12 +3,16 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.compliance
+
+    env_file:
+      - .env
+
     environment:
       GOOGLE_APPLICATION_CREDENTIALS: /secrets/gcp-sa.json
+
     volumes:
       - ./adk-agent-key.json:/secrets/gcp-sa.json:ro
-      # - GOOGLE_API_KEY=...
-      # - or GOOGLE_APPLICATION_CREDENTIALS inside container
+
     ports:
       - "8001:8001"
 
@@ -16,16 +20,20 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.api
+
+    env_file:
+      - .env
+
     environment:
       GOOGLE_APPLICATION_CREDENTIALS: /secrets/gcp-sa.json
-      GOOGLE_CLOUD_PROJECT: ${MONC_BQ_PROJECT_ID}
-      GOOGLE_CLOUD_LOCATION: europe-west1
       GOOGLE_GENAI_USE_VERTEXAI: "true"
 
     volumes:
       - ./adk-agent-key.json:/secrets/gcp-sa.json:ro
+
     depends_on:
       - compliance
+
     ports:
       - "8000:8000"
 

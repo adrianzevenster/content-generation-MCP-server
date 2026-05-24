@@ -13,7 +13,7 @@ from rag.embeddings import VertexEmbeddingClient
 from rag.gcs_io import ensure_bucket_exists, upload_json_lines_as_json
 from rag.chunking import simple_text_chunker
 from rag.index_admin import update_matching_engine_index
-
+from rag.docstore import write_docstore
 
 def _repo_root() -> str:
     return os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -106,12 +106,14 @@ def main() -> None:
 
     rows: List[Dict[str, Any]] = []
 
+    docstore_rows: List[Dict[str, Any]] = []
+
     for d in docs:
         chunks = simple_text_chunker(
-            d["doc_id"],
             d["text"],
             max_chars=2200,
             overlap_chars=200,
+            doc_id=d["doc_id"],
             base_metadata={
                 "title": d["title"],
                 "source": d["source"],
@@ -124,20 +126,44 @@ def main() -> None:
         if not chunks:
             continue
 
-        vectors = embedder.embed_texts([c.text for c in chunks], task_type="RETRIEVAL_DOCUMENT").vectors
+        chunk_texts = chunks
 
-        for c, v in zip(chunks, vectors):
+        vectors = embedder.embed_texts(chunk_texts)
+
+        for i, (chunk_text, v) in enumerate(zip(chunk_texts, vectors)):
+            chunk_id = f'{d["doc_id"]}::c{i:04d}'
+
+            metadata = {
+                "doc_id": d["doc_id"],
+                "title": d["title"],
+                "source": d["source"],
+                "type": d["type"],
+                "market": d["market"],
+                "product": d["product"],
+            }
+
             rows.append(
                 build_datapoint(
-                    chunk_id=c.chunk_id,
+                    chunk_id=chunk_id,
                     embedding=v,
-                    text=c.text,
+                    text=chunk_text,
                     doc_id=d["doc_id"],
-                    meta={**c.metadata, "title": d["title"], "source": d["source"]},
+                    meta=metadata,
                 )
             )
 
+            docstore_rows.append(
+                {
+                    "id": chunk_id,
+                    "text": chunk_text,
+                    "metadata": metadata,
+                }
+            )
+
     print(f"Total chunks: {len(rows)}")
+
+    write_docstore(docstore_rows)
+    print(f"Wrote docstore rows: {len(docstore_rows)}")
 
     ts = int(time.time())
     object_path = f"{cfg.gcs_prefix}/deltas/{ts}/embeddings.json"
