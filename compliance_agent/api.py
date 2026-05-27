@@ -3,8 +3,11 @@
 from textwrap import dedent
 from typing import List, Optional
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from pydantic import BaseModel
+
+from shared.auth import verify_api_key
+from shared.logging_config import configure_logging, get_logger
 
 from google.adk.agents.llm_agent import LlmAgent
 from google.adk.runners import Runner
@@ -62,6 +65,9 @@ class ReviewAdResponse(BaseModel):
 
 app = FastAPI(title="Moniepoint Compliance Agent")
 
+# Initialize logger
+logger = get_logger(__name__)
+
 session_service = InMemorySessionService()
 agent = build_compliance_agent()
 runner = Runner(
@@ -71,13 +77,20 @@ runner = Runner(
 )
 
 
+@app.on_event("startup")
+async def startup_event():
+    """Configure logging on application startup."""
+    configure_logging()
+    logger.info("application_startup", service="compliance")
+
+
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok"}
 
 
 @app.post("/reviewAd", response_model=ReviewAdResponse)
-async def review_ad(req: ReviewAdRequest) -> ReviewAdResponse:
+async def review_ad(req: ReviewAdRequest, api_key: str = Depends(verify_api_key)) -> ReviewAdResponse:
     session = await session_service.create_session(
         app_name="compliance-service",
         user_id="compliance-user",
@@ -103,8 +116,8 @@ async def review_ad(req: ReviewAdRequest) -> ReviewAdResponse:
             session_id=session.id,
             new_message=content,
     ):
-        # Debug log
-        print("COMPLIANCE EVENT:", event)
+        # Debug log compliance events
+        logger.debug("compliance_event", event_type=type(event).__name__)
         is_final = getattr(event, "is_final_response", None)
         if callable(is_final):
             final = is_final()

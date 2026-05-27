@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   compliance:
     build:
@@ -8,13 +10,35 @@ services:
       - .env
 
     environment:
-      GOOGLE_APPLICATION_CREDENTIALS: /secrets/gcp-sa.json
+      # Use Docker secret for GCP credentials
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/gcp_sa_key
 
-    volumes:
-      - ./adk-agent-key.json:/secrets/gcp-sa.json:ro
+    secrets:
+      - gcp_sa_key
+      - api_key
 
-    ports:
-      - "8001:8001"
+    networks:
+      - internal
+
+    # Port removed - internal access only via Docker network
+
+    restart: unless-stopped
+
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import requests; requests.get('http://localhost:8001/health', timeout=2).raise_for_status()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
 
   api:
     build:
@@ -25,26 +49,98 @@ services:
       - .env
 
     environment:
-      GOOGLE_APPLICATION_CREDENTIALS: /secrets/gcp-sa.json
+      # Use Docker secrets for credentials
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/gcp_sa_key
+      API_KEY_FILE: /run/secrets/api_key
       GOOGLE_GENAI_USE_VERTEXAI: "true"
+      # Internal service URL for compliance
+      COMPLIANCE_API_URL: http://compliance:8001/reviewAd
 
-    volumes:
-      - ./adk-agent-key.json:/secrets/gcp-sa.json:ro
+    secrets:
+      - gcp_sa_key
+      - api_key
 
     depends_on:
-      - compliance
+      compliance:
+        condition: service_healthy
 
-    ports:
-      - "8000:8000"
+    networks:
+      - internal
 
+    # Port removed - internal access only via Docker network
+
+    restart: unless-stopped
+
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import requests; requests.get('http://localhost:8000/health', timeout=2).raise_for_status()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
 
   ui:
     build:
       context: .
       dockerfile: ui/Dockerfile
+
     environment:
+      # Internal API URL
       API_BASE_URL: http://api:8000
+      # API key for authenticating with backend
+      API_KEY_FILE: /run/secrets/api_key
+
+    secrets:
+      - api_key
+
     depends_on:
-      - api
+      api:
+        condition: service_healthy
+
+    networks:
+      - internal
+      - external
+
     ports:
-      - "8501:8501"
+      - "8501:8501"  # ONLY UI exposed externally
+
+    restart: unless-stopped
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import requests; requests.get('http://localhost:8501/_stcore/health', timeout=2).raise_for_status()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+# Network configuration for security
+networks:
+  internal:
+    driver: bridge
+    # No ports exposed, but services can reach external APIs (GCP, etc.)
+  external:
+    driver: bridge  # UI needs external access for browser connections
+
+# Docker secrets configuration
+secrets:
+  gcp_sa_key:
+    file: ./secrets/gcp-sa.json
+  api_key:
+    file: ./secrets/api-key.txt
