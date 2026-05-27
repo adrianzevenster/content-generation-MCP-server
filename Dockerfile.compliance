@@ -14,5 +14,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . /app
 
+# Create non-root user for security
+RUN groupadd -r appuser && useradd -r -g appuser appuser
+
+# Change ownership to appuser
+RUN chown -R appuser:appuser /app
+
+# Switch to non-root user
+USER appuser
+
 EXPOSE 8001
 CMD ["uvicorn", "compliance_agent.api:app", "--host", "0.0.0.0", "--port", "8001"]

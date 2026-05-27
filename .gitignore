@@ -1,8 +1,36 @@
+# IDE
 .idea/
+.vscode/
+.DS_Store
+
+# Python
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
 .venv/
 venv/
+*.egg-info/
+dist/
+build/
+
+# Secrets and credentials (NEVER COMMIT)
 adk-agent-key.json
 secrets/
 .env
+*.key
+*.pem
+*.crt
+
+# Logs
+*.log
+*.pid
+
+# Testing and coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+
+# Production
+.env.production

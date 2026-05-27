@@ -1,13 +1,21 @@
-fastapi[standard]
-uvicorn[standard]
-python-dotenv
+fastapi[standard]>=0.115.0,<0.116.0
+uvicorn[standard]>=0.32.0
+python-dotenv>=1.0.0
 
+# Google ADK & AI - let pip resolve compatible versions
 google-adk[a2a]
 google-genai
-
 google-cloud-aiplatform>=1.60.0
 google-cloud-storage>=2.16.0
+google-cloud-bigquery>=3.25.0
 
+# HTTP client
+httpx>=0.27.0
+
+# MCP
 mcp
 
-httpx
+# Security & Monitoring (Production hardening) - pin for consistency
+prometheus-fastapi-instrumentator==7.0.0
+python-json-logger==2.0.7
+structlog>=24.0.0
