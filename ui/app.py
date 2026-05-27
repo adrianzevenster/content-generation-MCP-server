@@ -4,6 +4,25 @@ import streamlit as st
 
 API_BASE = os.getenv("API_BASE_URL", "http://api:8000")
 
+# Load API key from Docker secret or environment variable
+API_KEY = None
+API_KEY_FILE = os.getenv("API_KEY_FILE", "/run/secrets/api_key")
+if os.path.exists(API_KEY_FILE):
+    try:
+        with open(API_KEY_FILE, "r") as f:
+            API_KEY = f.read().strip()
+    except Exception as e:
+        st.warning(f"Failed to load API key from {API_KEY_FILE}: {e}")
+else:
+    # Fallback to environment variable for local development
+    API_KEY = os.getenv("API_KEY")
+
+def get_headers():
+    """Get request headers including API key authentication."""
+    if API_KEY:
+        return {"X-API-Key": API_KEY}
+    return {}
+
 st.set_page_config(page_title="MONC Prompt UI", layout="centered")
 st.title("MONC Ad Copy Generator")
 
@@ -46,7 +65,7 @@ if submitted:
     }
 
     try:
-        r = requests.post(f"{API_BASE}/generateAd", json=payload, timeout=60)
+        r = requests.post(f"{API_BASE}/generateAd", json=payload, headers=get_headers(), timeout=60)
         r.raise_for_status()
         data = r.json()
 
@@ -67,9 +86,6 @@ if submitted:
         if "r" in locals():
             st.text(r.text)
 
-# =========================
-# School of Hard Knocks UI
-# =========================
 
 st.divider()
 st.title("School of Hard Knocks")
@@ -114,6 +130,7 @@ if st.button("Get Hard Truth"):
             r = requests.post(
                 f"{API_BASE}/hardKnocks",
                 json={"prompt": hard_knocks_prompt},
+                headers=get_headers(),
                 timeout=90,
             )
             r.raise_for_status()

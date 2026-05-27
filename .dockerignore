@@ -1,11 +1,46 @@
+# Python
 .venv
+venv/
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.egg-info/
+
+# Git
 .git
+.gitignore
+
+# IDE
 .idea
+.vscode
 .DS_Store
+
+# Secrets and credentials (never include in image)
 .env
 adk-agent-key.json
+secrets/
+*.key
+*.pem
+*.crt
+
+# Logs and runtime
 *.log
+*.pid
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+
+# Documentation
+README.md
+docs/
+*.md
+DEPLOYMENT.md
+
+# Development files
+docker-compose.override.yml
+.env.local
+.env.development

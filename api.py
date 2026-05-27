@@ -3,9 +3,12 @@ import json
 from typing import Optional, List, Dict, Any
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from pydantic import BaseModel
 import httpx
+
+from shared.auth import verify_api_key
+from shared.logging_config import configure_logging, get_logger
 
 from google.adk.sessions import InMemorySessionService
 from google.adk.runners import Runner
@@ -77,12 +80,19 @@ hard_knocks_runner = Runner(
 
 app = FastAPI(title="Skywalker Shares Ad Copy Service (ADK + Compliance)")
 
+# Initialize logger
+logger = get_logger(__name__)
+
 rag_retriever = None
 rag_enabled = False
 
 
 @app.on_event("startup")
 async def startup_event() -> None:
+    # Configure structured logging
+    configure_logging()
+    logger.info("application_startup", service="api", app_name=APP_NAME)
+
     ensure_bigquery_dataset_and_table()
 
     global rag_retriever, rag_enabled
@@ -90,7 +100,7 @@ async def startup_event() -> None:
     if load_rag_config is None or VertexVectorSearchRetriever is None:
         rag_enabled = False
         rag_retriever = None
-        print("[RAG] rag module not available; continuing without RAG.")
+        logger.warning("rag_module_unavailable", message="RAG module not available; continuing without RAG")
         return
 
     cfg = load_rag_config()
@@ -98,17 +108,17 @@ async def startup_event() -> None:
     if not cfg.index_endpoint_resource_name or not cfg.deployed_index_id:
         rag_enabled = False
         rag_retriever = None
-        print("[RAG] Missing RAG_INDEX_ENDPOINT_RESOURCE_NAME or RAG_DEPLOYED_INDEX_ID; continuing without RAG.")
+        logger.warning("rag_config_incomplete", message="Missing RAG index endpoint or deployed index ID; continuing without RAG")
         return
 
     try:
         rag_retriever = VertexVectorSearchRetriever(cfg)
         rag_enabled = True
-        print("[RAG] Vertex Vector Search retriever initialized.")
+        logger.info("rag_initialized", message="Vertex Vector Search retriever initialized successfully")
     except Exception as exc:
         rag_enabled = False
         rag_retriever = None
-        print(f"[RAG] Failed to initialize retriever; continuing without RAG. Error: {exc}")
+        logger.error("rag_initialization_failed", error=str(exc), exc_info=True)
 
 
 class GenerateAdRequest(BaseModel):
@@ -146,7 +156,7 @@ async def health() -> dict:
 
 
 @app.post("/simpleTest", response_model=SimpleResponse)
-async def simple_test(req: SimpleRequest) -> SimpleResponse:
+async def simple_test(req: SimpleRequest, api_key: str = Depends(verify_api_key)) -> SimpleResponse:
     session = await session_service.create_session(
         app_name="simple-echo-service",
         user_id="test-user",
@@ -229,7 +239,7 @@ def _build_restricts(req: GenerateAdRequest) -> Optional[List[Dict[str, Any]]]:
 
 
 @app.post("/generateAd", response_model=GenerateAdResponse)
-async def generate_ad(req: GenerateAdRequest) -> GenerateAdResponse:
+async def generate_ad(req: GenerateAdRequest, api_key: str = Depends(verify_api_key)) -> GenerateAdResponse:
     brand_name = req.brand or "SkywalkerShares"
     brand_lower = brand_name.lower()
 
@@ -276,7 +286,7 @@ async def generate_ad(req: GenerateAdRequest) -> GenerateAdResponse:
             ]
 
         except Exception as exc:
-            print(f"[RAG] Retrieval failed (continuing without RAG context): {exc}")
+            logger.warning("rag_retrieval_failed", error=str(exc), query=retrieval_query)
             rag_block = ""
             rag_debug = []
 
@@ -305,7 +315,7 @@ async def generate_ad(req: GenerateAdRequest) -> GenerateAdResponse:
         product_details = _fallback_product_details(req.product_id, brand_name, req.country)
 
 
-    print(f"[PRODUCT] product_id={req.product_id} has_details={bool(product_details)}")
+    logger.debug("product_details_lookup", product_id=req.product_id, has_details=bool(product_details))
 
 
     query_parts.append("\n[BRAND_GUIDELINES]\n" + json.dumps(brand_guidelines, indent=2))
@@ -338,7 +348,7 @@ async def generate_ad(req: GenerateAdRequest) -> GenerateAdResponse:
                         final_text_chunks.append(part.text)
 
     except Exception as exc:
-        print(f"[ERROR] ADK runner failed: {exc}")
+        logger.error("adk_runner_failed", error=str(exc), brand=brand_name, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Agent execution failed: {exc}")
 
     if not any_events:
@@ -366,10 +376,10 @@ async def generate_ad(req: GenerateAdRequest) -> GenerateAdResponse:
                 approved = compliance.get("approved", True)
                 suggested_text = compliance.get("suggested_text") or ad_text
                 if not approved:
-                    print("[INFO] Compliance requested rewrite.")
+                    logger.info("compliance_rewrite_requested", original_length=len(ad_text), suggested_length=len(suggested_text))
                     ad_text = suggested_text
         except Exception as exc:
-            print(f"[WARN] Compliance service error: {exc}")
+            logger.warning("compliance_service_error", error=str(exc), url=COMPLIANCE_URL)
 
     agent_result: Dict[str, Any] = {
         "request": {
@@ -398,13 +408,13 @@ async def generate_ad(req: GenerateAdRequest) -> GenerateAdResponse:
     try:
         write_agent_result_to_bigquery(agent_result)
     except Exception as exc:
-        print(f"[WARN] Failed to persist to BigQuery: {exc}")
+        logger.warning("bigquery_persistence_failed", error=str(exc))
 
     return GenerateAdResponse(ad_copy=ad_text)
 
 
 @app.post("/hardKnocks", response_model=HardKnocksResponse)
-async def hard_knocks(req: HardKnocksRequest) -> HardKnocksResponse:
+async def hard_knocks(req: HardKnocksRequest, api_key: str = Depends(verify_api_key)) -> HardKnocksResponse:
     session = await session_service.create_session(
         app_name=HARD_KNOCKS_APP_NAME,
         user_id=USER_ID,
@@ -436,7 +446,7 @@ async def hard_knocks(req: HardKnocksRequest) -> HardKnocksResponse:
                         chunks.append(part.text)
 
     except Exception as exc:
-        print(f"[ERROR] HardKnocks runner failed: {exc}")
+        logger.error("hardknocks_runner_failed", error=str(exc), exc_info=True)
         raise HTTPException(status_code=500, detail=f"HardKnocks agent failed: {exc}")
 
     advice_text = (
@@ -457,6 +467,6 @@ async def hard_knocks(req: HardKnocksRequest) -> HardKnocksResponse:
     try:
         write_hardknocks_result_to_bigquery(hk_result)
     except Exception as exc:
-        print(f"[WARN] Failed to persist HardKnocks to BigQuery: {exc}")
+        logger.warning("hardknocks_bigquery_persistence_failed", error=str(exc))
 
     return HardKnocksResponse(advice=advice_text)
